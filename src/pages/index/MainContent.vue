@@ -1,6 +1,6 @@
 <template>
   <div class="main-content">
-    <SectionTabs v-model="activeTab" :status="status" />
+    <SectionTabs class="sticky-tabs" v-model="activeTab" :status="status" />
     <div
       class="content-area"
       @touchstart="handleTabSwipeStart($event)"
@@ -85,6 +85,7 @@ const loading = ref(false);
 const loadingTicketId = ref<number | null>(null);
 const tickets = ref<Ticket[]>([]);
 const claimedTicketIds = ref<Record<number, true>>({});
+const notifiedTicketIds = ref<Record<number, true>>({});
 const swipeOffsetMap = ref<Record<number, number>>({});
 const swipeMaxMap = ref<Record<number, number>>({});
 const draggingTicketId = ref<number | null>(null);
@@ -95,6 +96,7 @@ let refreshing = false;
 let swipeStartX = 0;
 let swipeStartOffset = 0;
 let mouseDraggingTicketId: number | null = null;
+let hasLoadedOnce = false;
 
 const vm = getCurrentInstance();
 
@@ -121,6 +123,38 @@ const displayTickets = computed(() => (activeTab.value === 'waiting' ? waitingTi
 
 const notify = (title: string, icon: 'none' | 'success' = 'none') => {
   uni.showToast({ title, icon, duration: 1800 });
+};
+
+const triggerLongVibration = () => {
+  try {
+    uni.vibrateLong();
+  } catch (error) {
+    console.warn('Long vibration not supported', error);
+  }
+};
+
+const triggerTicketAlert = (ticket: Ticket) => {
+  if (notifiedTicketIds.value[ticket.id]) {
+    return;
+  }
+
+  notifiedTicketIds.value = {
+    ...notifiedTicketIds.value,
+    [ticket.id]: true,
+  };
+
+  // 两次短震动
+  uni.vibrateShort();
+  setTimeout(() => {
+    uni.vibrateShort();
+  }, 300);
+
+  // 播放音频
+  const audio = uni.createInnerAudioContext();
+  audio.src = ticket.status === 'abnormal' ? '/static/Abnormal.mp3' : '/static/new.mp3';
+  audio.play();
+  audio.onEnded(() => audio.destroy());
+  audio.onError(() => audio.destroy());
 };
 
 const mergeTicket = (ticket: Ticket) => {
@@ -255,7 +289,10 @@ const handleSwipeEnd = async (ticket: Ticket) => {
   }
 
   setSwipeOffset(ticket.id, max);
-  await handleAction(ticket);
+  const success = await handleAction(ticket);
+  if (success) {
+    triggerLongVibration();
+  }
   resetSwipe(ticket.id);
 };
 
@@ -323,8 +360,19 @@ const refreshTickets = async (options: { silent?: boolean } = {}) => {
   }
 
   try {
+    const prevIdSet = new Set(tickets.value.map((item) => item.id));
     const list = await fetchOpenTickets();
     tickets.value = normalizeTickets(list.filter((item) => isActiveStatus(item.status)));
+
+    if (hasLoadedOnce) {
+      tickets.value.forEach((ticket) => {
+        if (!prevIdSet.has(ticket.id)) {
+          triggerTicketAlert(ticket);
+        }
+      });
+    }
+
+    hasLoadedOnce = true;
 
     const activeIdSet = new Set(tickets.value.map((item) => item.id));
     const nextClaimed: Record<number, true> = {};
@@ -374,6 +422,7 @@ const connectStream = () => {
   eventSource.addEventListener('ticket_created', (event) => {
     const payload = JSON.parse((event as MessageEvent).data || '{}') as Ticket;
     mergeTicket(payload);
+    triggerTicketAlert(payload);
   });
 
   eventSource.addEventListener('ticket_updated', (event) => {
@@ -469,7 +518,7 @@ const handleAction = async (ticket: Ticket) => {
     };
     // 不再自动切tab
     notify('已接起工单', 'success');
-    return;
+    return true;
   }
 
   loadingTicketId.value = ticket.id;
@@ -477,9 +526,11 @@ const handleAction = async (ticket: Ticket) => {
     await completeTicket(ticket.id);
     removeTicket(ticket.id);
     notify('工单已完成', 'success');
+    return true;
   } catch (error) {
     console.error(error);
     notify('回传失败，请稍后重试');
+    return false;
   } finally {
     loadingTicketId.value = null;
   }
@@ -555,7 +606,15 @@ onUnmounted(() => {
 
 .content-area {
   flex: 1;
-  padding: 10px 10px 18px;
+  padding: calc(10px + var(--tabs-height, 52px)) 10px 18px;
+}
+
+.sticky-tabs {
+  position: fixed;
+  top: calc(var(--status-bar-height, 0px) + var(--top-bar-height, 64px));
+  left: 0;
+  right: 0;
+  z-index: 18;
 }
 
 .ticket-list {

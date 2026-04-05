@@ -43,6 +43,23 @@
 
 <script setup lang="ts">
 import { computed, ref } from 'vue';
+
+/**
+ * 工单提醒：两次短震动+音频播放
+ * @param isAbnormal 是否异常工单
+ */
+function notifyOrder(isAbnormal: boolean) {
+  // 两次短震动
+  uni.vibrateShort();
+  setTimeout(() => {
+    uni.vibrateShort();
+  }, 300);
+
+  // 选择音频
+  const audio = uni.createInnerAudioContext();
+  audio.src = isAbnormal ? '/static/Abnormal.mp3' : '/static/new.mp3';
+  audio.play();
+}
 import UserAvatar from '@/components/UserAvatar.vue';
 import StatusDropdown from '@/components/StatusDropdown.vue';
 import SettingsIcon from '@/components/SettingsIcon.vue';
@@ -58,6 +75,10 @@ const statusLabelMap: Record<UserStatus, string> = {
 };
 
 const statusDropdownRef = ref<{ close: () => void } | null>(null);
+
+// 示例：收到工单时调用
+// notifyOrder(false); // 正常工单
+// notifyOrder(true);  // 异常工单
 const dropdownOpen = ref(false);
 const currentStatus = ref<UserStatus>('offline');
 const pendingStatus = ref<UserStatus | null>(null);
@@ -119,6 +140,8 @@ const confirmStatusChange = () => {
 .main-container {
   --header-bg: #2f2f31;
   --header-bg-soft: #3a3a3c;
+  --top-bar-height: 64px;
+  --tabs-height: 52px;
   min-height: 100vh;
   background: linear-gradient(180deg, var(--header-bg) 0, var(--header-bg-soft) 176px, #f5f5f5 176px, #f5f5f5 100%);
   position: relative;
@@ -145,7 +168,10 @@ const confirmStatusChange = () => {
   justify-content: space-between;
   align-items: center;
   padding: calc(var(--status-bar-height, 0px) + 12px) 16px 12px;
-  position: relative;
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
   z-index: 20;
   background: var(--header-bg);
 }
@@ -175,5 +201,6 @@ const confirmStatusChange = () => {
   position: relative;
   z-index: 1;
   background: transparent;
+  padding-top: calc(var(--status-bar-height, 0px) + var(--top-bar-height, 64px));
 }
 </style>
