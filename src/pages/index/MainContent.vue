@@ -1,15 +1,18 @@
 <template>
   <div class="main-content">
-    <SectionTabs class="sticky-tabs" v-model="activeTab" :status="status" />
-    <div
-      class="content-area"
-      @touchstart="handleTabSwipeStart($event)"
-      @touchmove="handleTabSwipeMove($event)"
-      @touchend="handleTabSwipeEnd"
-      @mousedown="handleTabMouseDown($event)"
+    <SectionTabs class="sticky-tabs" :style="{ top: statusBarHeight + topBarHeight + 'px' }" v-model="activeTab" :status="status" />
+    <swiper
+      class="content-swiper"
+      :style="{ height: swiperHeight + 'px' }"
+      :current="swiperCurrent"
+      :duration="280"
+      :easing-function="'easeOutCubic'"
+      @change="onSwiperChange"
     >
-      <div v-if="displayTickets.length" class="ticket-list">
-        <article v-for="ticket in displayTickets" :key="ticket.id" class="ticket-card">
+      <swiper-item class="swiper-panel">
+        <scroll-view class="panel-scroll" :style="{ height: swiperHeight + 'px' }" scroll-y enable-flex :bounces="false">
+      <div v-if="waitingTickets.length" class="ticket-list">
+        <article v-for="ticket in waitingTickets" :key="ticket.id" class="ticket-card">
           <div class="meta-row">
             <p>
               <span class="label label-blue">教室:</span>
@@ -38,7 +41,7 @@
           </p>
           <div class="swipe-action" :id="`swipe-${ticket.id}`">
             <div class="swipe-hint">
-              {{ loadingTicketId === ticket.id ? '处理中...' : activeTab === 'waiting' ? '向右滑动接起工单' : '向右滑动完成工单' }}
+              {{ loadingTicketId === ticket.id ? '处理中...' : '向右滑动接起工单' }}
             </div>
             <div
               class="swipe-handle"
@@ -51,7 +54,7 @@
               class="swipe-touch-layer"
               @touchstart.stop.prevent="handleSwipeStart(ticket.id, $event)"
               @touchmove.stop.prevent="handleSwipeMove(ticket.id, $event)"
-              @touchend.stop="handleSwipeEnd(ticket)"
+              @touchend.stop="handleSwipeEnd(ticket, 'waiting')"
               @touchcancel.stop="handleSwipeCancel(ticket.id)"
               @mousedown.stop.prevent="handleSwipeMouseDown(ticket.id, $event)"
             />
@@ -59,12 +62,80 @@
         </article>
       </div>
       <div v-else class="empty-state">
-        <p class="empty-title">{{ activeTab === 'waiting' ? '暂无等待接起工单' : '暂无待完成工单' }}</p>
-        <p class="empty-subtitle">{{ loading ? '正在同步后端工单数据...' : '工单创建可能存在延迟，请稍后刷新重试' }}</p>
-        <button class="refresh-btn" :disabled="loading" @click="handleManualRefresh">
-          {{ loading ? '同步中...' : '刷新状态' }}
-        </button>
+        <div class="empty-copy">
+          <image class="empty-img" src="@/static/empty-cat.png" mode="aspectFit" />
+          <p class="empty-title">暂无等待接起工单</p>
+          <p class="empty-subtitle">{{ loading ? '正在同步后端工单数据...' : '工单创建可能存在延迟，请稍后刷新重试' }}</p>
+        </div>
       </div>
+        </scroll-view>
+      </swiper-item>
+      <swiper-item class="swiper-panel">
+        <scroll-view class="panel-scroll" :style="{ height: swiperHeight + 'px' }" scroll-y enable-flex :bounces="false">
+      <div v-if="pendingTickets.length" class="ticket-list">
+        <article v-for="ticket in pendingTickets" :key="ticket.id" class="ticket-card">
+          <div class="meta-row">
+            <p>
+              <span class="label label-blue">教室:</span>
+              <span class="value">{{ ticket.classroom_id || '-' }}</span>
+            </p>
+            <p>
+              <span class="label">用户:</span>
+              <span class="value">{{ ticket.nickname || '-' }}</span>
+            </p>
+          </div>
+          <div class="content-block">
+            <p class="content-title">内容:</p>
+            <p class="content-text">{{ ticket.message || '暂无内容' }}</p>
+          </div>
+          <p class="detail-line">
+            <span class="label" :class="ticket.status === 'abnormal' ? 'label-danger' : 'label-purple'">状态:</span>
+            <span class="value" :class="{ 'value-danger': ticket.status === 'abnormal' }">{{ statusText(ticket.status) }}</span>
+          </p>
+          <p class="detail-line">
+            <span class="label">工单类型:</span>
+            <span class="value">{{ ticket.issue_type || '-' }}</span>
+          </p>
+          <p class="detail-line">
+            <span class="label label-orange">发起时间:</span>
+            <span class="value">{{ formatTime(ticket.time) }}</span>
+          </p>
+          <div class="swipe-action" :id="`swipe-${ticket.id}`">
+            <div class="swipe-hint">
+              {{ loadingTicketId === ticket.id ? '处理中...' : '向右滑动完成工单' }}
+            </div>
+            <div
+              class="swipe-handle"
+              :class="{ disabled: loadingTicketId === ticket.id }"
+              :style="swipeStyle(ticket.id)"
+            >
+              <span class="swipe-arrow">→</span>
+            </div>
+            <div
+              class="swipe-touch-layer"
+              @touchstart.stop.prevent="handleSwipeStart(ticket.id, $event)"
+              @touchmove.stop.prevent="handleSwipeMove(ticket.id, $event)"
+              @touchend.stop="handleSwipeEnd(ticket, 'pending')"
+              @touchcancel.stop="handleSwipeCancel(ticket.id)"
+              @mousedown.stop.prevent="handleSwipeMouseDown(ticket.id, $event)"
+            />
+          </div>
+        </article>
+      </div>
+      <div v-else class="empty-state">
+        <div class="empty-copy">
+          <image class="empty-img" src="@/static/empty-cat.png" mode="aspectFit" />
+          <p class="empty-title">暂无待完成工单</p>
+          <p class="empty-subtitle">{{ loading ? '正在同步后端工单数据...' : '工单创建可能存在延迟，请稍后刷新重试' }}</p>
+        </div>
+      </div>
+        </scroll-view>
+      </swiper-item>
+    </swiper>
+    <div class="bottom-bar">
+      <button class="refresh-btn bottom-refresh-btn" :disabled="loading" @click="handleManualRefresh">
+        {{ loading ? '同步中...' : '刷新状态' }}
+      </button>
     </div>
   </div>
 </template>
@@ -89,6 +160,11 @@ const notifiedTicketIds = ref<Record<number, true>>({});
 const swipeOffsetMap = ref<Record<number, number>>({});
 const swipeMaxMap = ref<Record<number, number>>({});
 const draggingTicketId = ref<number | null>(null);
+const swiperHeight = ref(500); // default fallback
+const statusBarHeight = ref(0);
+const topBarHeight = 64;
+const tabsHeight = 52;
+const bottomBarHeight = 78;
 let eventSource: EventSource | null = null;
 let reconnectTimer: number | null = null;
 let pollTimer: ReturnType<typeof setInterval> | null = null;
@@ -118,8 +194,6 @@ const waitingTickets = computed(() => {
 const pendingTickets = computed(() => {
   return tickets.value.filter((ticket) => isActiveStatus(ticket.status) && claimedTicketIds.value[ticket.id]);
 });
-
-const displayTickets = computed(() => (activeTab.value === 'waiting' ? waitingTickets.value : pendingTickets.value));
 
 const notify = (title: string, icon: 'none' | 'success' = 'none') => {
   uni.showToast({ title, icon, duration: 1800 });
@@ -273,7 +347,7 @@ const handleSwipeMove = (ticketId: number, event: TouchEvent) => {
   setSwipeOffset(ticketId, nextOffset);
 };
 
-const handleSwipeEnd = async (ticket: Ticket) => {
+const handleSwipeEnd = async (ticket: Ticket, tab: TicketTab) => {
   if (draggingTicketId.value !== ticket.id) {
     return;
   }
@@ -289,7 +363,7 @@ const handleSwipeEnd = async (ticket: Ticket) => {
   }
 
   setSwipeOffset(ticket.id, max);
-  const success = await handleAction(ticket);
+  const success = await handleAction(ticket, tab);
   if (success) {
     triggerLongVibration();
   }
@@ -330,7 +404,8 @@ const handleSwipeMouseUp = async () => {
     return;
   }
 
-  await handleSwipeEnd(target);
+  const tab: TicketTab = claimedTicketIds.value[ticketId] ? 'pending' : 'waiting';
+  await handleSwipeEnd(target, tab);
 };
 
 const handleSwipeMouseDown = async (ticketId: number, event: MouseEvent) => {
@@ -455,63 +530,15 @@ const connectStream = () => {
   };
 };
 
-// --- tab滑动切换 ---
-let tabSwipeStartX = 0;
-let tabSwipeDeltaX = 0;
-let tabSwipeActive = false;
-let tabMouseDown = false;
+// --- swiper 切换 ---
+const swiperCurrent = computed(() => (activeTab.value === 'waiting' ? 0 : 1));
 
-const handleTabSwipeStart = (event: TouchEvent) => {
-  if (event.touches.length !== 1) return;
-  tabSwipeStartX = event.touches[0].clientX;
-  tabSwipeDeltaX = 0;
-  tabSwipeActive = true;
+const onSwiperChange = (e: { detail: { current: number } }) => {
+  activeTab.value = e.detail.current === 0 ? 'waiting' : 'pending';
 };
 
-const handleTabSwipeMove = (event: TouchEvent) => {
-  if (!tabSwipeActive) return;
-  const x = event.touches[0].clientX;
-  tabSwipeDeltaX = x - tabSwipeStartX;
-};
-
-const handleTabSwipeEnd = () => {
-  if (!tabSwipeActive) return;
-  if (tabSwipeDeltaX > 60 && activeTab.value === 'pending') {
-    activeTab.value = 'waiting';
-  } else if (tabSwipeDeltaX < -60 && activeTab.value === 'waiting') {
-    activeTab.value = 'pending';
-  }
-  tabSwipeActive = false;
-  tabSwipeDeltaX = 0;
-};
-
-// 鼠标拖动兼容
-const handleTabMouseDown = (event: MouseEvent) => {
-  tabMouseDown = true;
-  tabSwipeStartX = event.clientX;
-  tabSwipeDeltaX = 0;
-  window.addEventListener('mousemove', handleTabMouseMove);
-  window.addEventListener('mouseup', handleTabMouseUp);
-};
-const handleTabMouseMove = (event: MouseEvent) => {
-  if (!tabMouseDown) return;
-  tabSwipeDeltaX = event.clientX - tabSwipeStartX;
-};
-const handleTabMouseUp = () => {
-  if (!tabMouseDown) return;
-  if (tabSwipeDeltaX > 60 && activeTab.value === 'pending') {
-    activeTab.value = 'waiting';
-  } else if (tabSwipeDeltaX < -60 && activeTab.value === 'waiting') {
-    activeTab.value = 'pending';
-  }
-  tabMouseDown = false;
-  tabSwipeDeltaX = 0;
-  window.removeEventListener('mousemove', handleTabMouseMove);
-  window.removeEventListener('mouseup', handleTabMouseUp);
-};
-
-const handleAction = async (ticket: Ticket) => {
-  if (activeTab.value === 'waiting') {
+const handleAction = async (ticket: Ticket, tab: TicketTab) => {
+  if (tab === 'waiting') {
     claimedTicketIds.value = {
       ...claimedTicketIds.value,
       [ticket.id]: true,
@@ -565,14 +592,24 @@ const formatTime = (time: number | string | undefined) => {
 };
 
 onMounted(async () => {
+  // 计算 swiper 高度: 窗口高度 - 顶栏 - tabs - 底栏
+  try {
+    const sysInfo = uni.getSystemInfoSync();
+    const windowHeight = sysInfo.windowHeight || 600;
+    statusBarHeight.value = sysInfo.statusBarHeight || 0;
+    // windowHeight 在 APP 端是可用窗口高度（已减去状态栏）
+    swiperHeight.value = Math.max(windowHeight - topBarHeight - tabsHeight - bottomBarHeight, 260);
+  } catch (e) {
+    // fallback
+    swiperHeight.value = 500;
+  }
+
   await refreshTickets();
   connectStream();
   startPolling();
 });
 
 onUnmounted(() => {
-  window.removeEventListener('mousemove', handleTabMouseMove);
-  window.removeEventListener('mouseup', handleTabMouseUp);
   if (mouseDraggingTicketId !== null) {
     window.removeEventListener('mousemove', handleSwipeMouseMove);
     window.removeEventListener('mouseup', handleSwipeMouseUp);
@@ -599,19 +636,34 @@ onUnmounted(() => {
 <style scoped>
 .main-content {
   background: #f5f5f5;
-  min-height: calc(100vh - 88px - var(--status-bar-height, 0px));
+  width: 100%;
+  height: 100%;
   display: flex;
   flex-direction: column;
 }
 
-.content-area {
-  flex: 1;
-  padding: calc(10px + var(--tabs-height, 52px)) 10px 18px;
+.content-swiper {
+  margin-top: 52px;
+  width: 100%;
+}
+
+.swiper-panel {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+
+.panel-scroll {
+  width: 100%;
+  padding: 10px 10px 24px;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
 }
 
 .sticky-tabs {
   position: fixed;
-  top: calc(var(--status-bar-height, 0px) + var(--top-bar-height, 64px));
+  top: 64px;
   left: 0;
   right: 0;
   z-index: 18;
@@ -765,12 +817,33 @@ onUnmounted(() => {
 }
 
 .empty-state {
-  flex: 1;
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 56px 24px 80px;
+  padding: 0 24px 0 2px;
+  box-sizing: border-box;
+  pointer-events: none;
+  z-index: 2;
+}
+
+.empty-copy {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.empty-img {
+  width: 96px;
+  height: 96px;
+  object-fit: contain;
+  margin-bottom: 18px;
+  display: block;
 }
 
 .empty-title {
@@ -786,6 +859,7 @@ onUnmounted(() => {
   color: #9b9b9b;
   line-height: 1.5;
   text-align: center;
+  max-width: 260px;
 }
 
 .refresh-btn {
@@ -799,7 +873,6 @@ onUnmounted(() => {
   cursor: pointer;
   box-shadow: 0 4px 15px rgba(74, 144, 226, 0.4);
   transition: all 0.2s;
-  margin-top: 20px;
 }
 
 .refresh-btn:active {
@@ -809,6 +882,29 @@ onUnmounted(() => {
 
 .refresh-btn:disabled {
   opacity: 0.65;
+}
+
+.bottom-bar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 19;
+  height: 78px;
+  padding: 12px 16px calc(12px + env(safe-area-inset-bottom));
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  background: #ffffff;
+  border-top: 1px solid rgba(215, 215, 215, 0.9);
+}
+
+.bottom-refresh-btn {
+  min-width: 132px;
+  padding: 12px 28px;
+  border-radius: 10px;
+  margin: 0 0 0 auto;
 }
 
 </style>

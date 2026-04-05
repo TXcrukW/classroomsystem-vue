@@ -10,4 +10,13 @@ onHide(() => {
   console.log("App Hide");
 });
 </script>
-<style></style>
+<style>
+/* 禁用页面弹性滚动效果 */
+page {
+  overscroll-behavior: none;
+  -webkit-overflow-scrolling: auto;
+}
+body {
+  overscroll-behavior: none;
+}
+</style>
