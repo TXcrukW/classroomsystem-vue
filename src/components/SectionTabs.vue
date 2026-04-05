@@ -1,14 +1,14 @@
 <template>
   <div class="section-tabs" :class="`status-${status}`">
     <button 
-      :class="{ active: activeTab === 'waiting' }" 
-      @click="activeTab = 'waiting'"
+      :class="{ active: modelValue === 'waiting' }" 
+      @click="setActive('waiting')"
     >
       等待接起
     </button>
     <button 
-      :class="{ active: activeTab === 'pending' }" 
-      @click="activeTab = 'pending'"
+      :class="{ active: modelValue === 'pending' }" 
+      @click="setActive('pending')"
     >
       待完成
     </button>
@@ -16,14 +16,20 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue';
+type TicketTab = 'waiting' | 'pending';
 
 defineProps<{
   status: 'offline' | 'online' | 'break';
+  modelValue: TicketTab;
 }>();
 
-const activeTab = ref('waiting');
-// 可通过 emit 通知父组件切换内容
+const emit = defineEmits<{
+  (event: 'update:modelValue', value: TicketTab): void;
+}>();
+
+const setActive = (tab: TicketTab) => {
+  emit('update:modelValue', tab);
+};
 </script>
 
 <style scoped>
