@@ -1,84 +1,76 @@
 <template>
-  <transition name="page-slide-fade" appear>
-    <div class="main-content">
-      <SectionTabs v-model="activeTab" :status="status" />
-      <div
-        class="content-area"
-        @touchstart="handleTabSwipeStart($event)"
-        @touchmove="handleTabSwipeMove($event)"
-        @touchend="handleTabSwipeEnd"
-        @mousedown="handleTabMouseDown($event)"
-      >
-        <transition :name="tabTransitionName" mode="out-in">
-          <template v-if="displayTickets.length">
-            <div class="ticket-list" :key="activeTab">
-              <article v-for="ticket in displayTickets" :key="ticket.id" class="ticket-card">
-                <div class="meta-row">
-                  <p>
-                    <span class="label label-blue">教室:</span>
-                    <span class="value">{{ ticket.classroom_id || '-' }}</span>
-                  </p>
-                  <p>
-                    <span class="label">用户:</span>
-                    <span class="value">{{ ticket.nickname || '-' }}</span>
-                  </p>
-                </div>
-                <div class="content-block">
-                  <p class="content-title">内容:</p>
-                  <p class="content-text">{{ ticket.message || '暂无内容' }}</p>
-                </div>
-                <p class="detail-line">
-                  <span class="label" :class="ticket.status === 'abnormal' ? 'label-danger' : 'label-purple'">状态:</span>
-                  <span class="value" :class="{ 'value-danger': ticket.status === 'abnormal' }">{{ statusText(ticket.status) }}</span>
-                </p>
-                <p class="detail-line">
-                  <span class="label">工单类型:</span>
-                  <span class="value">{{ ticket.issue_type || '-' }}</span>
-                </p>
-                <p class="detail-line">
-                  <span class="label label-orange">发起时间:</span>
-                  <span class="value">{{ formatTime(ticket.time) }}</span>
-                </p>
-                <div class="swipe-action" :id="`swipe-${ticket.id}`">
-                  <div class="swipe-hint">
-                    {{ loadingTicketId === ticket.id ? '处理中...' : activeTab === 'waiting' ? '向右滑动接起工单' : '向右滑动完成工单' }}
-                  </div>
-                  <div
-                    class="swipe-handle"
-                    :class="{ disabled: loadingTicketId === ticket.id }"
-                    :style="swipeStyle(ticket.id)"
-                  >
-                    <span class="swipe-arrow">→</span>
-                  </div>
-                  <div
-                    class="swipe-touch-layer"
-                    @touchstart.stop.prevent="handleSwipeStart(ticket.id, $event)"
-                    @touchmove.stop.prevent="handleSwipeMove(ticket.id, $event)"
-                    @touchend.stop="handleSwipeEnd(ticket)"
-                    @touchcancel.stop="handleSwipeCancel(ticket.id)"
-                    @mousedown.stop.prevent="handleSwipeMouseDown(ticket.id, $event)"
-                  />
-                </div>
-              </article>
+  <div class="main-content">
+    <SectionTabs v-model="activeTab" :status="status" />
+    <div
+      class="content-area"
+      @touchstart="handleTabSwipeStart($event)"
+      @touchmove="handleTabSwipeMove($event)"
+      @touchend="handleTabSwipeEnd"
+      @mousedown="handleTabMouseDown($event)"
+    >
+      <div v-if="displayTickets.length" class="ticket-list">
+        <article v-for="ticket in displayTickets" :key="ticket.id" class="ticket-card">
+          <div class="meta-row">
+            <p>
+              <span class="label label-blue">教室:</span>
+              <span class="value">{{ ticket.classroom_id || '-' }}</span>
+            </p>
+            <p>
+              <span class="label">用户:</span>
+              <span class="value">{{ ticket.nickname || '-' }}</span>
+            </p>
+          </div>
+          <div class="content-block">
+            <p class="content-title">内容:</p>
+            <p class="content-text">{{ ticket.message || '暂无内容' }}</p>
+          </div>
+          <p class="detail-line">
+            <span class="label" :class="ticket.status === 'abnormal' ? 'label-danger' : 'label-purple'">状态:</span>
+            <span class="value" :class="{ 'value-danger': ticket.status === 'abnormal' }">{{ statusText(ticket.status) }}</span>
+          </p>
+          <p class="detail-line">
+            <span class="label">工单类型:</span>
+            <span class="value">{{ ticket.issue_type || '-' }}</span>
+          </p>
+          <p class="detail-line">
+            <span class="label label-orange">发起时间:</span>
+            <span class="value">{{ formatTime(ticket.time) }}</span>
+          </p>
+          <div class="swipe-action" :id="`swipe-${ticket.id}`">
+            <div class="swipe-hint">
+              {{ loadingTicketId === ticket.id ? '处理中...' : activeTab === 'waiting' ? '向右滑动接起工单' : '向右滑动完成工单' }}
             </div>
-          </template>
-          <template v-else>
-            <div class="empty-state" :key="'empty-' + activeTab">
-              <p class="empty-title">{{ activeTab === 'waiting' ? '暂无等待接起工单' : '暂无待完成工单' }}</p>
-              <p class="empty-subtitle">{{ loading ? '正在同步后端工单数据...' : '工单创建可能存在延迟，请稍后刷新重试' }}</p>
-              <button class="refresh-btn" :disabled="loading" @click="handleManualRefresh">
-                {{ loading ? '同步中...' : '刷新状态' }}
-              </button>
+            <div
+              class="swipe-handle"
+              :class="{ disabled: loadingTicketId === ticket.id }"
+              :style="swipeStyle(ticket.id)"
+            >
+              <span class="swipe-arrow">→</span>
             </div>
-          </template>
-        </transition>
+            <div
+              class="swipe-touch-layer"
+              @touchstart.stop.prevent="handleSwipeStart(ticket.id, $event)"
+              @touchmove.stop.prevent="handleSwipeMove(ticket.id, $event)"
+              @touchend.stop="handleSwipeEnd(ticket)"
+              @touchcancel.stop="handleSwipeCancel(ticket.id)"
+              @mousedown.stop.prevent="handleSwipeMouseDown(ticket.id, $event)"
+            />
+          </div>
+        </article>
+      </div>
+      <div v-else class="empty-state">
+        <p class="empty-title">{{ activeTab === 'waiting' ? '暂无等待接起工单' : '暂无待完成工单' }}</p>
+        <p class="empty-subtitle">{{ loading ? '正在同步后端工单数据...' : '工单创建可能存在延迟，请稍后刷新重试' }}</p>
+        <button class="refresh-btn" :disabled="loading" @click="handleManualRefresh">
+          {{ loading ? '同步中...' : '刷新状态' }}
+        </button>
       </div>
     </div>
-  </transition>
+  </div>
 </template>
 
 <script setup lang="ts">
-import { computed, getCurrentInstance, onMounted, onUnmounted, ref, watch } from 'vue';
+import { computed, getCurrentInstance, onMounted, onUnmounted, ref } from 'vue';
 import SectionTabs from '@/components/SectionTabs.vue';
 import { completeTicket, createTicketsEventSource, fetchOpenTickets, type Ticket, type TicketStatus } from '@/api/tickets';
 
@@ -89,7 +81,6 @@ defineProps<{
 }>();
 
 const activeTab = ref<TicketTab>('waiting');
-const tabTransitionName = ref('slide-left');
 const loading = ref(false);
 const loadingTicketId = ref<number | null>(null);
 const tickets = ref<Ticket[]>([]);
@@ -127,14 +118,6 @@ const pendingTickets = computed(() => {
 });
 
 const displayTickets = computed(() => (activeTab.value === 'waiting' ? waitingTickets.value : pendingTickets.value));
-
-watch(activeTab, (val, old) => {
-  if (old === 'waiting' && val === 'pending') {
-    tabTransitionName.value = 'slide-left';
-  } else if (old === 'pending' && val === 'waiting') {
-    tabTransitionName.value = 'slide-right';
-  }
-});
 
 const notify = (title: string, icon: 'none' | 'success' = 'none') => {
   uni.showToast({ title, icon, duration: 1800 });
@@ -769,61 +752,4 @@ onUnmounted(() => {
   opacity: 0.65;
 }
 
-:global(.page-slide-fade-enter-active) {
-  transition: all 0.5s cubic-bezier(.55,0,.1,1);
-}
-
-:global(.page-slide-fade-leave-active) {
-  transition: all 0.3s cubic-bezier(.55,0,.1,1);
-}
-
-:global(.page-slide-fade-enter-from) {
-  opacity: 0;
-  transform: translateX(40px);
-}
-
-:global(.page-slide-fade-enter-to) {
-  opacity: 1;
-  transform: translateX(0);
-}
-
-:global(.page-slide-fade-leave-from) {
-  opacity: 1;
-  transform: translateX(0);
-}
-
-:global(.page-slide-fade-leave-to) {
-  opacity: 0;
-  transform: translateX(-40px);
-}
-
-:global(.slide-left-enter-active),
-:global(.slide-right-leave-active) {
-  transition: transform 0.32s cubic-bezier(.55,0,.1,1);
-}
-
-:global(.slide-left-leave-active),
-:global(.slide-right-enter-active) {
-  transition: transform 0.32s cubic-bezier(.55,0,.1,1);
-}
-
-:global(.slide-left-enter-from),
-:global(.slide-right-leave-to) {
-  transform: translateX(100%);
-  opacity: 0.7;
-}
-
-:global(.slide-left-leave-to),
-:global(.slide-right-enter-from) {
-  transform: translateX(-100%);
-  opacity: 0.7;
-}
-
-:global(.slide-left-enter-to),
-:global(.slide-left-leave-from),
-:global(.slide-right-enter-to),
-:global(.slide-right-leave-from) {
-  transform: translateX(0);
-  opacity: 1;
-}
 </style>

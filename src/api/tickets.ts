@@ -44,10 +44,23 @@ type RequestConfig = {
   method?: string;
   header?: Record<string, string>;
   data?: unknown;
+  timeout?: number;
 };
+
+const REQUEST_TIMEOUT = 8000;
 
 function request<T>(url: string, options?: RequestConfig): Promise<T> {
   return new Promise((resolve, reject) => {
+    let settled = false;
+    const timeoutMs = options?.timeout ?? REQUEST_TIMEOUT;
+    const timer = setTimeout(() => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      reject(new Error('Request timeout'));
+    }, timeoutMs);
+
     uni.request({
       url: `${API_BASE}${url}`,
       method: (options?.method || 'GET') as unknown as UniApp.RequestOptions['method'],
@@ -56,15 +69,40 @@ function request<T>(url: string, options?: RequestConfig): Promise<T> {
         ...(options?.header || {}),
       },
       data: options?.data as any,
+      timeout: options?.timeout ?? REQUEST_TIMEOUT,
       success: (res) => {
+        if (settled) {
+          return;
+        }
+        settled = true;
+        clearTimeout(timer);
+
+        let payload: unknown = res.data;
+        if (typeof payload === 'string') {
+          const trimmed = payload.trim();
+          if ((trimmed.startsWith('{') && trimmed.endsWith('}')) || (trimmed.startsWith('[') && trimmed.endsWith(']'))) {
+            try {
+              payload = JSON.parse(trimmed);
+            } catch (error) {
+              console.warn('Failed to parse response JSON:', error);
+            }
+          }
+        }
+
         if (res.statusCode && res.statusCode >= 200 && res.statusCode < 300) {
-          resolve(res.data as T);
+          resolve(payload as T);
           return;
         }
 
         reject(new Error(`HTTP ${res.statusCode || 'unknown'}`));
       },
       fail: (error) => {
+        if (settled) {
+          return;
+        }
+        settled = true;
+        clearTimeout(timer);
+        console.error('Request failed:', `${API_BASE}${url}`, error);
         reject(error);
       },
     });
