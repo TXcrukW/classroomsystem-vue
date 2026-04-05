@@ -1,19 +1,63 @@
 <template>
-  <div class="settings-icon">
-    <svg width="24" height="24" viewBox="0 0 24 24">
-      <path d="M12 15.5A3.5 3.5 0 1 0 12 8.5a3.5 3.5 0 0 0 0 7zm7.43-2.9l1.77-1.03a.5.5 0 0 0 .18-.68l-1.68-2.92a.5.5 0 0 0-.61-.23l-2.08.83a7.03 7.03 0 0 0-1.5-.87l-.32-2.23A.5.5 0 0 0 14 4h-4a.5.5 0 0 0-.5.42l-.32 2.23a7.03 7.03 0 0 0-1.5.87l-2.08-.83a.5.5 0 0 0-.61.23l-1.68 2.92a.5.5 0 0 0 .18.68l1.77 1.03a7.07 7.07 0 0 0 0 1.74l-1.77 1.03a.5.5 0 0 0-.18.68l1.68 2.92a.5.5 0 0 0 .61.23l2.08-.83c.47.34.97.63 1.5.87l.32 2.23A.5.5 0 0 0 10 20h4a.5.5 0 0 0 .5-.42l.32-2.23c.53-.24 1.03-.53 1.5-.87l2.08.83a.5.5 0 0 0 .61-.23l1.68-2.92a.5.5 0 0 0-.18-.68l-1.77-1.03a7.07 7.07 0 0 0 0-1.74z"/>
-    </svg>
+  <div class="more-icon" :class="`status-${status}`">
+    <div class="dots-container">
+      <span class="dot"></span>
+      <span class="dot"></span>
+      <span class="dot"></span>
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
-// 设置点击逻辑后续补充
+defineProps<{
+  status: 'offline' | 'online' | 'break';
+}>();
 </script>
 
 <style scoped>
-.settings-icon {
-  cursor: pointer;
+.more-icon {
+  color: #6b7280;
+  width: 40px;
+  height: 40px;
+  background: #ececef;
+  border-radius: 50%;
   display: flex;
   align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.04);
+}
+
+.more-icon.status-offline {
+  background: rgba(255, 255, 255, 0.2);
+  color: #ffffff;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(8px);
+}
+
+.more-icon.status-online {
+  background: rgba(255, 255, 255, 0.4);
+  color: #5d7da6;
+  box-shadow: inset 0 0 0 1px rgba(86, 131, 179, 0.1);
+  backdrop-filter: blur(8px);
+}
+
+.more-icon.status-break {
+  background: rgba(255, 255, 255, 0.4);
+  color: #9d6a6a;
+  box-shadow: inset 0 0 0 1px rgba(186, 110, 110, 0.1);
+  backdrop-filter: blur(8px);
+}
+
+.dots-container {
+  display: flex;
+  gap: 3px;
+}
+
+.dot {
+  width: 5px;
+  height: 5px;
+  background: currentColor;
+  border-radius: 50%;
 }
 </style>

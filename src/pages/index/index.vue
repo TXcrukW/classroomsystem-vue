@@ -1,71 +1,82 @@
 
 <template>
-  <div class="main-container">
-    <div class="hero-bg"></div>
+  <div class="main-container" :class="`status-${currentStatus}`">
     <!-- 顶部栏 -->
     <div class="top-bar">
       <div class="top-left">
-        <UserAvatar />
-        <StatusDropdown />
+        <UserAvatar :status="currentStatus" />
+        <StatusDropdown v-model="currentStatus" :status="currentStatus" />
       </div>
       <div class="top-right">
-        <SettingsIcon />
+        <SettingsIcon :status="currentStatus" />
       </div>
     </div>
     <!-- 主内容区 -->
     <div class="content-wrapper">
-      <MainContent />
+      <MainContent :status="currentStatus" />
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
+import { ref } from 'vue';
 import UserAvatar from '@/components/UserAvatar.vue';
 import StatusDropdown from '@/components/StatusDropdown.vue';
 import SettingsIcon from '@/components/SettingsIcon.vue';
 import MainContent from './MainContent.vue';
+
+const currentStatus = ref<'offline' | 'online' | 'break'>('offline');
 </script>
 
 <style scoped>
 .main-container {
+  --header-bg: #2f2f31;
+  --header-bg-soft: #3a3a3c;
   min-height: 100vh;
-  background: #f2f4f8;
-  padding: 0 16px 32px 16px;
+  background: linear-gradient(180deg, var(--header-bg) 0, var(--header-bg-soft) 176px, #f5f5f5 176px, #f5f5f5 100%);
   position: relative;
   overflow: hidden;
 }
-.hero-bg {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 220px;
-  background: radial-gradient(circle at 20% 20%, rgba(255, 255, 255, 0.25), transparent 50%),
-    linear-gradient(120deg, #3b7af7, #2d5df2 55%, #2a4fe8);
-  border-bottom-left-radius: 28px;
-  border-bottom-right-radius: 28px;
-  z-index: 0;
+
+.main-container.status-offline {
+  --header-bg: #2f2f31;
+  --header-bg-soft: #3a3a3c;
 }
+
+.main-container.status-online {
+  --header-bg: #d9ebff;
+  --header-bg-soft: #e7f2ff;
+}
+
+.main-container.status-break {
+  --header-bg: #ffe0e0;
+  --header-bg-soft: #ffebeb;
+}
+
 .top-bar {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 24px 8px 0 8px;
+  padding: calc(var(--status-bar-height, 0px) + 12px) 16px 12px;
   position: relative;
-  z-index: 1;
+  z-index: 20;
+  background: var(--header-bg);
 }
+
 .top-left {
   display: flex;
   align-items: center;
   gap: 12px;
 }
+
 .top-right {
   display: flex;
   align-items: center;
 }
+
 .content-wrapper {
-  margin-top: 22px;
   position: relative;
   z-index: 1;
+  background: transparent;
 }
 </style>

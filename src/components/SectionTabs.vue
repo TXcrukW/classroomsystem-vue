@@ -1,48 +1,92 @@
 <template>
-  <div class="section-tabs">
-    <button :class="{ active: activeTab === 'pending' }" @click="activeTab = 'pending'">待处理</button>
-    <button :class="{ active: activeTab === 'processing' }" @click="activeTab = 'processing'">处理中</button>
-    <button :class="{ active: activeTab === 'done' }" @click="activeTab = 'done'">已完成</button>
+  <div class="section-tabs" :class="`status-${status}`">
+    <button 
+      :class="{ active: activeTab === 'waiting' }" 
+      @click="activeTab = 'waiting'"
+    >
+      等待接起
+    </button>
+    <button 
+      :class="{ active: activeTab === 'pending' }" 
+      @click="activeTab = 'pending'"
+    >
+      待完成
+    </button>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref } from 'vue';
-const activeTab = ref('pending');
+
+defineProps<{
+  status: 'offline' | 'online' | 'break';
+}>();
+
+const activeTab = ref('waiting');
 // 可通过 emit 通知父组件切换内容
 </script>
 
 <style scoped>
 .section-tabs {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  --tab-bg: #3a3a3c;
+  --tab-text: rgba(255, 255, 255, 0.68);
+  --tab-active: #ffffff;
+  --tab-indicator: rgba(255, 255, 255, 0.72);
+  display: flex;
   align-items: center;
-  padding: 4px 12px 10px;
-  border-radius: 14px;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.85), rgba(255, 255, 255, 0.75));
+  background: var(--tab-bg);
+  padding: 0 16px;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
 }
+
+.section-tabs.status-offline {
+  --tab-bg: #3a3a3c;
+  --tab-text: rgba(255, 255, 255, 0.7);
+  --tab-active: #ffffff;
+  --tab-indicator: rgba(255, 255, 255, 0.75);
+}
+
+.section-tabs.status-online {
+  --tab-bg: #e7f2ff;
+  --tab-text: #89a7c8;
+  --tab-active: #3d5a80;
+  --tab-indicator: #9bbfe6;
+}
+
+.section-tabs.status-break {
+  --tab-bg: #ffebeb;
+  --tab-text: #c58a8a;
+  --tab-active: #8d4e4e;
+  --tab-indicator: #d5a3a3;
+}
+
 .section-tabs button {
+  flex: 1;
   position: relative;
-  padding: 10px 0;
+  padding: 16px 0 14px;
   border: none;
   background: transparent;
   font-size: 16px;
-  color: #666;
+  color: var(--tab-text);
   cursor: pointer;
+  font-weight: 500;
+  transition: all 0.2s;
 }
+
 .section-tabs button.active {
-  color: #2b6df8;
+  color: var(--tab-active);
   font-weight: 600;
 }
+
 .section-tabs button.active::after {
   content: '';
   position: absolute;
   left: 50%;
-  bottom: -4px;
-  width: 28px;
+  bottom: 0;
+  width: 40px;
   height: 3px;
   transform: translateX(-50%);
-  border-radius: 999px;
-  background: #2b6df8;
+  border-radius: 2px 2px 0 0;
+  background: var(--tab-indicator);
 }
 </style>
