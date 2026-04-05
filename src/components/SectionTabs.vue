@@ -4,7 +4,7 @@
       :class="{ active: modelValue === 'waiting' }" 
       @click="setActive('waiting')"
     >
-      等待接起
+      待接单
     </button>
     <button 
       :class="{ active: modelValue === 'pending' }" 
