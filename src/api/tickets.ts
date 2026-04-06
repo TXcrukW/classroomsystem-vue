@@ -1,4 +1,4 @@
-export type TicketStatus = 'open' | 'abnormal' | 'resolved';
+export type TicketStatus = 'open' | 'abnormal' | 'accepted' | 'resolved';
 
 export interface TicketUpdate {
   time: number;
@@ -27,18 +27,27 @@ interface TicketsResponse {
   message?: string;
 }
 
-interface CompleteTicketPayload {
+export interface UpdateTicketStatusPayload {
+  status: 'accepted' | 'resolved' | 'completed';
   note?: string;
   operator?: string;
 }
 
-interface CompleteTicketResponse {
+interface UpdateTicketStatusResponse {
   status: 'ok' | 'error';
   message: string;
   ticket?: Ticket;
 }
 
-const API_BASE = ((import.meta as ImportMeta & { env?: Record<string, string> }).env?.VITE_API_BASE || 'http://192.168.10.2:6789').replace(/\/$/, '');
+const UNI_ENV = (import.meta as ImportMeta & { env?: Record<string, string> }).env || {};
+const DEFAULT_LAN_API_BASE = 'http://192.168.10.2:6789';
+const rawApiBase = String(UNI_ENV.VITE_API_BASE || '').trim();
+const platform = String(UNI_ENV.UNI_PLATFORM || '').toLowerCase();
+const isAppPlus = platform === 'app-plus';
+const isLocalhostBase = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i.test(rawApiBase);
+
+// Real-device debugging cannot reach localhost on the development machine.
+const API_BASE = (isAppPlus && isLocalhostBase ? DEFAULT_LAN_API_BASE : rawApiBase || DEFAULT_LAN_API_BASE).replace(/\/$/, '');
 
 type RequestConfig = {
   method?: string;
@@ -48,6 +57,14 @@ type RequestConfig = {
 };
 
 const REQUEST_TIMEOUT = 8000;
+
+function isHttp404(error: unknown) {
+  return error instanceof Error && /HTTP\s+404/i.test(error.message);
+}
+
+function isHttp405(error: unknown) {
+  return error instanceof Error && /HTTP\s+405/i.test(error.message);
+}
 
 function request<T>(url: string, options?: RequestConfig): Promise<T> {
   return new Promise((resolve, reject) => {
@@ -94,7 +111,8 @@ function request<T>(url: string, options?: RequestConfig): Promise<T> {
           return;
         }
 
-        reject(new Error(`HTTP ${res.statusCode || 'unknown'}`));
+        const payloadText = typeof payload === 'string' ? payload : JSON.stringify(payload || {});
+        reject(new Error(`HTTP ${res.statusCode || 'unknown'} ${url} ${payloadText}`));
       },
       fail: (error) => {
         if (settled) {
@@ -119,20 +137,104 @@ export async function fetchOpenTickets(): Promise<Ticket[]> {
   return response.tickets || [];
 }
 
-export async function completeTicket(ticketId: number, payload: CompleteTicketPayload = {}): Promise<Ticket | undefined> {
-  const response = await request<CompleteTicketResponse>(`/api/tickets/${ticketId}/complete`, {
-    method: 'PATCH',
-    data: {
-      operator: 'frontend-app',
-      ...payload,
-    },
-  });
+export async function fetchTickets(): Promise<Ticket[]> {
+  const response = await request<TicketsResponse>('/api/tickets');
 
   if (response.status !== 'ok') {
-    throw new Error(response.message || '工单完成回传失败');
+    throw new Error(response.message || '获取工单失败');
   }
 
-  return response.ticket;
+  return response.tickets || [];
+}
+
+export async function updateTicketStatus(ticketId: number, payload: UpdateTicketStatusPayload): Promise<Ticket | undefined> {
+  const requestData = {
+    operator: 'frontend-app',
+    ...payload,
+  };
+
+  const statusPath = `/api/tickets/${ticketId}/status`;
+  const acceptPath = `/api/tickets/${ticketId}/accept`;
+  const completePath = `/api/tickets/${ticketId}/complete`;
+
+  try {
+    const response = await request<UpdateTicketStatusResponse>(statusPath, {
+      method: 'PATCH',
+      data: requestData,
+    });
+
+    if (response.status !== 'ok') {
+      throw new Error(response.message || '工单状态回传失败');
+    }
+
+    return response.ticket;
+  } catch (error) {
+    // 兼容旧后端：resolved/completed 走 /complete。
+    if (isHttp404(error) && (payload.status === 'resolved' || payload.status === 'completed')) {
+      const response = await request<UpdateTicketStatusResponse>(completePath, {
+        method: 'PATCH',
+        data: requestData,
+      });
+
+      if (response.status !== 'ok') {
+        throw new Error(response.message || '工单完成回传失败');
+      }
+
+      return response.ticket;
+    }
+
+    // 兼容部分后端将“接起”单独暴露为 /accept。
+    if (isHttp404(error) && payload.status === 'accepted') {
+      try {
+        const response = await request<UpdateTicketStatusResponse>(acceptPath, {
+          method: 'PATCH',
+          data: requestData,
+        });
+
+        if (response.status !== 'ok') {
+          throw new Error(response.message || '工单接起回传失败');
+        }
+
+        return response.ticket;
+      } catch (acceptError) {
+        // 某些服务端可能把 /accept 实现成 POST。
+        if (isHttp405(acceptError) || isHttp404(acceptError)) {
+          const response = await request<UpdateTicketStatusResponse>(acceptPath, {
+            method: 'POST',
+            data: requestData,
+          });
+
+          if (response.status !== 'ok') {
+            throw new Error(response.message || '工单接起回传失败');
+          }
+
+          return response.ticket;
+        }
+
+        throw acceptError;
+      }
+    }
+
+    if (isHttp404(error) && payload.status === 'accepted') {
+      throw new Error('后端未匹配到接起接口（/status 或 /accept）');
+    }
+
+    throw error;
+  }
+}
+
+export async function acceptTicket(ticketId: number, payload: Omit<UpdateTicketStatusPayload, 'status'> = {}): Promise<Ticket | undefined> {
+  return updateTicketStatus(ticketId, {
+    status: 'accepted',
+    ...payload,
+  });
+}
+
+export async function completeTicket(ticketId: number, payload: Omit<UpdateTicketStatusPayload, 'status'> = {}): Promise<Ticket | undefined> {
+  return updateTicketStatus(ticketId, {
+    status: 'resolved',
+    ...payload,
+  });
 }
 
 export function createTicketsEventSource(): EventSource | null {

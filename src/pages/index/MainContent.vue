@@ -143,7 +143,7 @@
 <script setup lang="ts">
 import { computed, getCurrentInstance, onMounted, onUnmounted, ref } from 'vue';
 import SectionTabs from '@/components/SectionTabs.vue';
-import { completeTicket, createTicketsEventSource, fetchOpenTickets, type Ticket, type TicketStatus } from '@/api/tickets';
+import { acceptTicket, completeTicket, createTicketsEventSource, fetchTickets, type Ticket, type TicketStatus } from '@/api/tickets';
 
 type TicketTab = 'waiting' | 'pending';
 
@@ -155,7 +155,6 @@ const activeTab = ref<TicketTab>('waiting');
 const loading = ref(false);
 const loadingTicketId = ref<number | null>(null);
 const tickets = ref<Ticket[]>([]);
-const claimedTicketIds = ref<Record<number, true>>({});
 const notifiedTicketIds = ref<Record<number, true>>({});
 const swipeOffsetMap = ref<Record<number, number>>({});
 const swipeMaxMap = ref<Record<number, number>>({});
@@ -188,15 +187,27 @@ const normalizeTickets = (list: Ticket[]) => {
 const isActiveStatus = (status: TicketStatus) => status !== 'resolved';
 
 const waitingTickets = computed(() => {
-  return tickets.value.filter((ticket) => isActiveStatus(ticket.status) && !claimedTicketIds.value[ticket.id]);
+  return tickets.value.filter((ticket) => ticket.status === 'open' || ticket.status === 'abnormal');
 });
 
 const pendingTickets = computed(() => {
-  return tickets.value.filter((ticket) => isActiveStatus(ticket.status) && claimedTicketIds.value[ticket.id]);
+  return tickets.value.filter((ticket) => ticket.status === 'accepted');
 });
 
 const notify = (title: string, icon: 'none' | 'success' = 'none') => {
   uni.showToast({ title, icon, duration: 1800 });
+};
+
+const getErrorMessage = (error: unknown, fallback: string) => {
+  if (error instanceof Error && error.message) {
+    if (error.message.includes('后端未匹配到接起接口') || error.message.includes('/api/tickets/:id/status')) {
+      return '后端未启用接起接口，请升级并重启服务';
+    }
+
+    return error.message.length > 32 ? fallback : error.message;
+  }
+
+  return fallback;
 };
 
 const triggerLongVibration = () => {
@@ -234,11 +245,6 @@ const triggerTicketAlert = (ticket: Ticket) => {
 const mergeTicket = (ticket: Ticket) => {
   if (!isActiveStatus(ticket.status)) {
     tickets.value = tickets.value.filter((item) => item.id !== ticket.id);
-    if (claimedTicketIds.value[ticket.id]) {
-      const next = { ...claimedTicketIds.value };
-      delete next[ticket.id];
-      claimedTicketIds.value = next;
-    }
     return;
   }
 
@@ -255,11 +261,6 @@ const mergeTicket = (ticket: Ticket) => {
 
 const removeTicket = (ticketId: number) => {
   tickets.value = tickets.value.filter((item) => item.id !== ticketId);
-  if (claimedTicketIds.value[ticketId]) {
-    const next = { ...claimedTicketIds.value };
-    delete next[ticketId];
-    claimedTicketIds.value = next;
-  }
 
   if (swipeOffsetMap.value[ticketId] !== undefined || swipeMaxMap.value[ticketId] !== undefined) {
     const nextOffset = { ...swipeOffsetMap.value };
@@ -404,7 +405,7 @@ const handleSwipeMouseUp = async () => {
     return;
   }
 
-  const tab: TicketTab = claimedTicketIds.value[ticketId] ? 'pending' : 'waiting';
+  const tab: TicketTab = target.status === 'accepted' ? 'pending' : 'waiting';
   await handleSwipeEnd(target, tab);
 };
 
@@ -436,7 +437,7 @@ const refreshTickets = async (options: { silent?: boolean } = {}) => {
 
   try {
     const prevIdSet = new Set(tickets.value.map((item) => item.id));
-    const list = await fetchOpenTickets();
+    const list = await fetchTickets();
     tickets.value = normalizeTickets(list.filter((item) => isActiveStatus(item.status)));
 
     if (hasLoadedOnce) {
@@ -448,16 +449,6 @@ const refreshTickets = async (options: { silent?: boolean } = {}) => {
     }
 
     hasLoadedOnce = true;
-
-    const activeIdSet = new Set(tickets.value.map((item) => item.id));
-    const nextClaimed: Record<number, true> = {};
-    Object.keys(claimedTicketIds.value).forEach((id) => {
-      const numId = Number(id);
-      if (activeIdSet.has(numId)) {
-        nextClaimed[numId] = true;
-      }
-    });
-    claimedTicketIds.value = nextClaimed;
   } catch (error) {
     console.error(error);
     if (!silent) {
@@ -538,17 +529,28 @@ const onSwiperChange = (e: { detail: { current: number } }) => {
 };
 
 const handleAction = async (ticket: Ticket, tab: TicketTab) => {
+  loadingTicketId.value = ticket.id;
+
   if (tab === 'waiting') {
-    claimedTicketIds.value = {
-      ...claimedTicketIds.value,
-      [ticket.id]: true,
-    };
-    // 不再自动切tab
-    notify('已接起工单', 'success');
-    return true;
+    try {
+      const updatedTicket = await acceptTicket(ticket.id);
+      if (updatedTicket) {
+        mergeTicket(updatedTicket);
+      } else {
+        await refreshTickets({ silent: true });
+      }
+
+      notify('已接起工单', 'success');
+      return true;
+    } catch (error) {
+      console.error(error);
+      notify(getErrorMessage(error, '接起回传失败，请稍后重试'));
+      return false;
+    } finally {
+      loadingTicketId.value = null;
+    }
   }
 
-  loadingTicketId.value = ticket.id;
   try {
     await completeTicket(ticket.id);
     removeTicket(ticket.id);
@@ -556,7 +558,7 @@ const handleAction = async (ticket: Ticket, tab: TicketTab) => {
     return true;
   } catch (error) {
     console.error(error);
-    notify('回传失败，请稍后重试');
+    notify(getErrorMessage(error, '回传失败，请稍后重试'));
     return false;
   } finally {
     loadingTicketId.value = null;
@@ -570,6 +572,7 @@ const handleManualRefresh = () => {
 const statusText = (status: TicketStatus) => {
   if (status === 'open') return '正常待处理';
   if (status === 'abnormal') return '异常待处理';
+  if (status === 'accepted') return '处理中';
   return '已完成';
 };
 
