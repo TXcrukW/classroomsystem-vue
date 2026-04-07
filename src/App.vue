@@ -1,32 +1,59 @@
 <script setup lang="ts">
 import { onLaunch, onShow, onHide } from "@dcloudio/uni-app";
-import { isSessionLoggedIn, resetSessionLogin } from "@/utils/auth";
+import { clearToken, getToken } from "@/utils/auth";
+import { verifyToken } from "@/api/tickets";
 
 const LOGIN_PAGE = "/pages/login/index";
+const HOME_PAGE = "/pages/index/index";
 
-const ensureLoginPageForGuest = () => {
-  if (isSessionLoggedIn()) {
-    return;
-  }
+let authCheckInFlight = false;
 
+const getCurrentRoute = () => {
   const pages = getCurrentPages();
-  const currentRoute = pages.length ? `/${pages[pages.length - 1].route}` : "";
-  if (currentRoute === LOGIN_PAGE) {
+  return pages.length ? `/${pages[pages.length - 1].route}` : "";
+};
+
+const ensureAuthRoute = async () => {
+  if (authCheckInFlight) {
     return;
   }
 
-  uni.reLaunch({ url: LOGIN_PAGE });
+  authCheckInFlight = true;
+  try {
+    const token = getToken();
+    const currentRoute = getCurrentRoute();
+
+    if (!token) {
+      if (currentRoute && currentRoute !== LOGIN_PAGE) {
+        uni.reLaunch({ url: LOGIN_PAGE });
+      }
+      return;
+    }
+
+    const isValid = await verifyToken();
+    if (!isValid) {
+      clearToken();
+      if (currentRoute !== LOGIN_PAGE) {
+        uni.reLaunch({ url: LOGIN_PAGE });
+      }
+      return;
+    }
+
+    if (currentRoute === LOGIN_PAGE || !currentRoute) {
+      uni.reLaunch({ url: HOME_PAGE });
+    }
+  } finally {
+    authCheckInFlight = false;
+  }
 };
 
 onLaunch(() => {
   console.log("App Launch");
-  resetSessionLogin();
-  uni.removeStorageSync("isLoggedIn");
-  ensureLoginPageForGuest();
+  ensureAuthRoute();
 });
 onShow(() => {
   console.log("App Show");
-  ensureLoginPageForGuest();
+  ensureAuthRoute();
 });
 onHide(() => {
   console.log("App Hide");

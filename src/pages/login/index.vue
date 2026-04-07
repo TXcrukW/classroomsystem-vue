@@ -57,10 +57,12 @@
         </button>
 
         <view class="remember-row">
-          <label class="remember-label">
-            <input type="checkbox" v-model="rememberMe" class="remember-checkbox" />
-            <text class="remember-text">记住我</text>
-          </label>
+          <checkbox-group @change="handleRememberChange">
+            <label class="remember-label">
+              <checkbox :checked="rememberMe" class="remember-checkbox" color="#24b6e4" />
+              <text class="remember-text">记住我</text>
+            </label>
+          </checkbox-group>
         </view>
 
         <view class="form-links">
@@ -80,19 +82,43 @@
 
 <script setup lang="ts">
 import { onMounted, ref } from 'vue';
-import { isSessionLoggedIn, setSessionLoggedIn } from '@/utils/auth';
+import {
+  clearRememberedCredentials,
+  clearToken,
+  getRememberedCredentials,
+  getToken,
+  saveRememberedCredentials,
+  setToken,
+} from '@/utils/auth';
+import { verifyToken } from '@/api/tickets';
 
 const username = ref('');
 const password = ref('');
 const submitting = ref(false);
 const rememberMe = ref(false);
 
-onMounted(() => {
-  // 优先读本地持久化登录态
-  if (uni.getStorageSync('isLoggedIn') === true || isSessionLoggedIn()) {
-    uni.reLaunch({ url: '/pages/index/index' });
+onMounted(async () => {
+  const rememberedCredentials = getRememberedCredentials();
+  if (rememberedCredentials) {
+    username.value = rememberedCredentials.username;
+    password.value = rememberedCredentials.password;
+    rememberMe.value = true;
+  }
+
+  const token = getToken();
+  if (token) {
+    const isValid = await verifyToken();
+    if (isValid) {
+      uni.reLaunch({ url: '/pages/index/index' });
+    } else {
+      clearToken();
+    }
   }
 });
+
+const handleRememberChange = (event: { detail?: { value?: string[] } }) => {
+  rememberMe.value = !!event?.detail?.value?.length;
+};
 
 const handleLogin = async () => {
   if (!username.value) {
@@ -107,21 +133,51 @@ const handleLogin = async () => {
 
   submitting.value = true;
 
-  // 模拟登录
-  setTimeout(() => {
-    submitting.value = false;
-    setSessionLoggedIn(true);
-    if (rememberMe.value) {
-      uni.setStorageSync('isLoggedIn', true);
-    } else {
-      uni.removeStorageSync('isLoggedIn');
-    }
-    uni.showToast({ title: '登录成功', icon: 'success' });
-
-    uni.reLaunch({
-      url: '/pages/index/index',
+  try {
+    const API_BASE = 'http://192.168.10.2:6789'; // 遵循接口文档
+    const res = await uni.request({
+      url: `${API_BASE}/api/login`,
+      method: 'POST',
+      data: {
+        username: username.value,
+        password: password.value
+      }
     });
-  }, 1000);
+
+    const data = res.data as any;
+
+    if (res.statusCode === 200 && data.status === 'success') {
+      const token = data.token;
+      setToken(token);
+
+      if (rememberMe.value) {
+        saveRememberedCredentials({
+          username: username.value,
+          password: password.value,
+        });
+      } else {
+        clearRememberedCredentials();
+      }
+      
+      uni.showToast({ title: '登录成功', icon: 'success' });
+      
+      setTimeout(() => {
+        uni.reLaunch({
+          url: '/pages/index/index',
+        });
+      }, 500);
+    } else {
+      uni.showToast({ 
+        title: data.message || '登录失败', 
+        icon: 'none' 
+      });
+    }
+  } catch (error) {
+    console.error('Login error:', error);
+    uni.showToast({ title: '网络请求失败', icon: 'none' });
+  } finally {
+    submitting.value = false;
+  }
 };
 
 const handleForgotPassword = () => {
@@ -148,10 +204,8 @@ const handleRegister = () => {
   user-select: none;
 }
 .remember-checkbox {
-  width: 18px;
-  height: 18px;
-  margin-right: 6px;
-  accent-color: #24b6e4;
+  transform: scale(0.9);
+  margin-right: 4px;
 }
 .remember-text {
   font-size: 15px;

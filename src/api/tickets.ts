@@ -1,3 +1,5 @@
+import { clearToken, getToken } from '@/utils/auth';
+
 export type TicketStatus = 'open' | 'abnormal' | 'accepted' | 'resolved';
 
 export interface TicketUpdate {
@@ -67,6 +69,7 @@ function isHttp405(error: unknown) {
 }
 
 function request<T>(url: string, options?: RequestConfig): Promise<T> {
+  const token = getToken();
   return new Promise((resolve, reject) => {
     let settled = false;
     const timeoutMs = options?.timeout ?? REQUEST_TIMEOUT;
@@ -83,6 +86,7 @@ function request<T>(url: string, options?: RequestConfig): Promise<T> {
       method: (options?.method || 'GET') as unknown as UniApp.RequestOptions['method'],
       header: {
         'Content-Type': 'application/json',
+        'Authorization': token ? `Bearer ${token}` : '',
         ...(options?.header || {}),
       },
       data: options?.data as any,
@@ -109,6 +113,11 @@ function request<T>(url: string, options?: RequestConfig): Promise<T> {
         if (res.statusCode && res.statusCode >= 200 && res.statusCode < 300) {
           resolve(payload as T);
           return;
+        }
+
+        if (res.statusCode === 401) {
+          clearToken();
+          uni.reLaunch({ url: '/pages/login/index' });
         }
 
         const payloadText = typeof payload === 'string' ? payload : JSON.stringify(payload || {});
@@ -237,10 +246,21 @@ export async function completeTicket(ticketId: number, payload: Omit<UpdateTicke
   });
 }
 
+export async function verifyToken(): Promise<boolean> {
+  try {
+    const response = await request<{ status: string }>('/api/verify-token');
+    return response.status === 'success';
+  } catch (error) {
+    return false;
+  }
+}
+
 export function createTicketsEventSource(): EventSource | null {
   if (typeof EventSource === 'undefined') {
     return null;
   }
-
-  return new EventSource(`${API_BASE}/api/tickets/stream`);
+  
+  const token = getToken();
+  const url = `${API_BASE}/api/tickets/stream${token ? `?token=${token}` : ''}`;
+  return new EventSource(url);
 }
