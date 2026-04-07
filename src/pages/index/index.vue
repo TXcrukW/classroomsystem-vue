@@ -2,7 +2,7 @@
 <template>
   <div class="main-container" :class="`status-${currentStatus}`">
     <!-- 顶部栏 -->
-    <div class="top-bar" @tap="dropdownOpen && closeStatusDropdown()">
+    <div class="top-bar" @tap="closeAllDropdowns">
       <div class="top-left">
         <UserAvatar :status="currentStatus" />
         <StatusDropdown
@@ -14,14 +14,18 @@
         />
       </div>
       <div class="top-right">
-        <SettingsIcon :status="currentStatus" />
+        <SettingsIcon
+          ref="settingsDropdownRef"
+          :status="currentStatus"
+          @update:open="onSettingsOpenChange"
+        />
       </div>
     </div>
     <!-- 下拉遮罩：放在页面层级确保真机可点击 -->
     <view
       v-if="dropdownOpen"
       class="dropdown-overlay"
-      @tap.stop="closeStatusDropdown"
+      @tap.stop="closeAllDropdowns"
     ></view>
 
     <!-- 主内容区 -->
@@ -75,6 +79,7 @@ const statusLabelMap: Record<UserStatus, string> = {
 };
 
 const statusDropdownRef = ref<{ close: () => void } | null>(null);
+const settingsDropdownRef = ref<{ close: () => void } | null>(null);
 
 // 示例：收到工单时调用
 // notifyOrder(false); // 正常工单
@@ -86,6 +91,20 @@ const statusConfirmVisible = ref(false);
 
 const onDropdownOpenChange = (val: boolean) => {
   dropdownOpen.value = val;
+  if (val) settingsDropdownRef.value?.close();
+};
+
+const onSettingsOpenChange = (val: boolean) => {
+  if (val) {
+    statusDropdownRef.value?.close();
+    dropdownOpen.value = false;
+  }
+};
+
+const closeAllDropdowns = () => {
+  statusDropdownRef.value?.close();
+  settingsDropdownRef.value?.close();
+  dropdownOpen.value = false;
 };
 
 const closeStatusDropdown = () => {

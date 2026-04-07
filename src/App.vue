@@ -39,7 +39,7 @@ const ensureAuthRoute = async () => {
       return;
     }
 
-    if (currentRoute === LOGIN_PAGE || !currentRoute) {
+    if (currentRoute === LOGIN_PAGE) {
       uni.reLaunch({ url: HOME_PAGE });
     }
   } finally {
