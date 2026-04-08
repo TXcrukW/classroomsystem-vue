@@ -89,6 +89,7 @@ import {
   getToken,
   saveRememberedCredentials,
   setToken,
+  setCurrentUser,
 } from '@/utils/auth';
 import { verifyToken } from '@/api/tickets';
 
@@ -149,6 +150,13 @@ const handleLogin = async () => {
     if (res.statusCode === 200 && data.status === 'success') {
       const token = data.token;
       setToken(token);
+      
+      // 保存当前登录用户的 username
+      if (data.user && data.user.username) {
+        setCurrentUser(data.user.username);
+      } else {
+        setCurrentUser(username.value); // fallback
+      }
 
       if (rememberMe.value) {
         saveRememberedCredentials({

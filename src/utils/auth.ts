@@ -1,4 +1,5 @@
 const TOKEN_KEY = 'token';
+const CURRENT_USER_KEY = 'currentUser';
 const REMEMBER_CREDENTIALS_KEY = 'rememberedCredentials';
 
 export interface RememberedCredentials {
@@ -14,6 +15,47 @@ export const setToken = (token: string) => {
 
 export const clearToken = () => {
   uni.removeStorageSync(TOKEN_KEY);
+};
+
+export const getCurrentUser = () => {
+  const stored = String(uni.getStorageSync(CURRENT_USER_KEY) || '');
+  if (stored) return stored;
+  
+  // 备用方案 1: 从 Token 尝试解析 (如果是 JWT 标准的话)
+  try {
+    const token = getToken();
+    if (token && token.includes('.')) {
+      let payloadBase64 = token.split('.')[1];
+      payloadBase64 = payloadBase64.replace(/-/g, '+').replace(/_/g, '/');
+      while (payloadBase64.length % 4) {
+        payloadBase64 += '=';
+      }
+      const payloadStr = decodeURIComponent(
+        atob(payloadBase64).split('').map(c => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2)).join('')
+      );
+      const decodedInfo = JSON.parse(payloadStr);
+      if (decodedInfo && decodedInfo.username) {
+        uni.setStorageSync(CURRENT_USER_KEY, decodedInfo.username);
+        return String(decodedInfo.username);
+      }
+    }
+  } catch (e) {
+    console.warn('Failed to decode token payload:', e);
+  }
+
+  // 备用方案 2: 使用保持登录状态保存的信息
+  const remembered = getRememberedCredentials();
+  if (remembered && remembered.username) return remembered.username;
+
+  return 'frontend-app'; // Default fallback
+};
+
+export const setCurrentUser = (username: string) => {
+  uni.setStorageSync(CURRENT_USER_KEY, username);
+};
+
+export const clearCurrentUser = () => {
+  uni.removeStorageSync(CURRENT_USER_KEY);
 };
 
 export const isSessionLoggedIn = () => !!getToken();

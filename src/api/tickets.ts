@@ -1,4 +1,4 @@
-import { clearToken, getToken } from '@/utils/auth';
+import { clearToken, getToken, getCurrentUser } from '@/utils/auth';
 
 export type TicketStatus = 'open' | 'abnormal' | 'accepted' | 'resolved';
 
@@ -13,6 +13,7 @@ export interface Ticket {
   time: number;
   updated_at: number;
   status: TicketStatus;
+  assigned_to?: string;
   group_id: number;
   group_name: string;
   nickname: string;
@@ -158,7 +159,7 @@ export async function fetchTickets(): Promise<Ticket[]> {
 
 export async function updateTicketStatus(ticketId: number, payload: UpdateTicketStatusPayload): Promise<Ticket | undefined> {
   const requestData = {
-    operator: 'frontend-app',
+    operator: getCurrentUser() || 'frontend-app',
     ...payload,
   };
 
@@ -248,7 +249,10 @@ export async function completeTicket(ticketId: number, payload: Omit<UpdateTicke
 
 export async function verifyToken(): Promise<boolean> {
   try {
-    const response = await request<{ status: string }>('/api/verify-token');
+    const response = await request<{ status: string; user?: { username?: string } }>('/api/verify-token');
+    if (response.status === 'success' && response.user && response.user.username) {
+      import('@/utils/auth').then(m => m.setCurrentUser(response.user!.username!));
+    }
     return response.status === 'success';
   } catch (error) {
     return false;

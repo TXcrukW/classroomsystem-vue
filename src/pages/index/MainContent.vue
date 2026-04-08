@@ -29,7 +29,7 @@
           </div>
           <p class="detail-line">
             <span class="label" :class="ticket.status === 'abnormal' ? 'label-danger' : 'label-purple'">状态:</span>
-            <span class="value" :class="{ 'value-danger': ticket.status === 'abnormal' }">{{ statusText(ticket.status) }}</span>
+            <span class="value" :class="{ 'value-danger': ticket.status === 'abnormal' }">{{ getStatusText(ticket) }}</span>
           </p>
           <p class="detail-line">
             <span class="label">工单类型:</span>
@@ -90,7 +90,7 @@
           </div>
           <p class="detail-line">
             <span class="label" :class="ticket.status === 'abnormal' ? 'label-danger' : 'label-purple'">状态:</span>
-            <span class="value" :class="{ 'value-danger': ticket.status === 'abnormal' }">{{ statusText(ticket.status) }}</span>
+            <span class="value" :class="{ 'value-danger': ticket.status === 'abnormal' }">{{ getStatusText(ticket) }}</span>
           </p>
           <p class="detail-line">
             <span class="label">工单类型:</span>
@@ -144,6 +144,7 @@
 import { computed, getCurrentInstance, onMounted, onUnmounted, ref } from 'vue';
 import SectionTabs from '@/components/SectionTabs.vue';
 import { acceptTicket, completeTicket, createTicketsEventSource, fetchTickets, type Ticket, type TicketStatus } from '@/api/tickets';
+import { getCurrentUser } from '@/utils/auth';
 
 type TicketTab = 'waiting' | 'pending';
 
@@ -184,14 +185,35 @@ const normalizeTickets = (list: Ticket[]) => {
   return [...list].sort((a, b) => Number(b.updated_at || b.time) - Number(a.updated_at || a.time));
 };
 
-const isActiveStatus = (status: TicketStatus) => status !== 'resolved';
+const isActiveStatus = (ticket: Ticket) => {
+  if (ticket.status === 'resolved') return false;
+  
+  // 如果工单已被接起，但不是我接起的，那么对我来说它已经不再是“活动状态”的待办了
+  if (ticket.status === 'accepted') {
+    const currentUser = (getCurrentUser() || '').trim().toLowerCase();
+    const assigned = String(ticket.assigned_to || '').trim().toLowerCase();
+    return assigned === currentUser;
+  }
+  
+  return true;
+};
 
 const waitingTickets = computed(() => {
-  return tickets.value.filter((ticket) => ticket.status === 'open' || ticket.status === 'abnormal');
+  return tickets.value.filter((ticket) => {
+    // 仅显示“待接起”或“异常”状态的工单
+    // 后端已优化接口，但前端增加此逻辑可确保 SSE 推送或缓存数据时，他人接起的工单能立即从列表中消失
+    return ticket.status === 'open' || ticket.status === 'abnormal';
+  });
 });
 
 const pendingTickets = computed(() => {
-  return tickets.value.filter((ticket) => ticket.status === 'accepted');
+  const currentUser = (getCurrentUser() || '').trim().toLowerCase();
+  return tickets.value.filter((ticket) => {
+    if (ticket.status !== 'accepted') return false;
+    if (!ticket.assigned_to) return true;
+    const assigned = String(ticket.assigned_to).trim().toLowerCase();
+    return assigned === currentUser;
+  });
 });
 
 const notify = (title: string, icon: 'none' | 'success' = 'none') => {
@@ -243,7 +265,7 @@ const triggerTicketAlert = (ticket: Ticket) => {
 };
 
 const mergeTicket = (ticket: Ticket) => {
-  if (!isActiveStatus(ticket.status)) {
+  if (!isActiveStatus(ticket)) {
     tickets.value = tickets.value.filter((item) => item.id !== ticket.id);
     return;
   }
@@ -438,7 +460,7 @@ const refreshTickets = async (options: { silent?: boolean } = {}) => {
   try {
     const prevIdSet = new Set(tickets.value.map((item) => item.id));
     const list = await fetchTickets();
-    tickets.value = normalizeTickets(list.filter((item) => isActiveStatus(item.status)));
+    tickets.value = normalizeTickets(list.filter((item) => isActiveStatus(item)));
 
     if (hasLoadedOnce) {
       tickets.value.forEach((ticket) => {
@@ -481,7 +503,7 @@ const connectStream = () => {
 
   eventSource.addEventListener('snapshot', (event) => {
     const payload = JSON.parse((event as MessageEvent).data || '{}') as { tickets?: Ticket[] };
-    const nextTickets = (payload.tickets || []).filter((item) => isActiveStatus(item.status));
+    const nextTickets = (payload.tickets || []).filter((item) => isActiveStatus(item));
     tickets.value = normalizeTickets(nextTickets);
   });
 
@@ -569,10 +591,19 @@ const handleManualRefresh = () => {
   refreshTickets();
 };
 
-const statusText = (status: TicketStatus) => {
-  if (status === 'open') return '正常待处理';
-  if (status === 'abnormal') return '异常待处理';
-  if (status === 'accepted') return '处理中';
+const getStatusText = (ticket: Ticket) => {
+  if (ticket.status === 'open') return '正常待处理';
+  if (ticket.status === 'abnormal') return '异常待处理';
+  if (ticket.status === 'accepted') {
+    const currentUser = (getCurrentUser() || '').trim().toLowerCase();
+    if (ticket.assigned_to && currentUser) {
+      const assigned = String(ticket.assigned_to).trim().toLowerCase();
+      if (assigned !== currentUser) {
+        return `被 ${ticket.assigned_to} 处理中`;
+      }
+    }
+    return '处理中';
+  }
   return '已完成';
 };
 

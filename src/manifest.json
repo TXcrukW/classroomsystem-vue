@@ -1,8 +1,8 @@
 {
-    "name" : "校园工单DEV",
+    "name" : "校园维修工单DEV",
     "appid" : "__UNI__1AC1BF2",
     "description" : "",
-    "versionName" : "1.0.0",
+    "versionName" : "1.1.0",
     "versionCode" : "100",
     "transformPx" : false,
     /* 5+App特有相关 */
