@@ -151,9 +151,13 @@ const handleLogin = async () => {
       const token = data.token;
       setToken(token);
       
-      // 保存当前登录用户的 username
+      // 保存当前登录用户的 username 和 status
       if (data.user && data.user.username) {
         setCurrentUser(data.user.username);
+        // 如果后端返回了用户上一次的状态，则保存以便在主页初始化
+        if (data.user.status) {
+          uni.setStorageSync('user_last_status', data.user.status);
+        }
       } else {
         setCurrentUser(username.value); // fallback
       }

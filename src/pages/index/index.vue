@@ -69,6 +69,8 @@ import StatusDropdown from '@/components/StatusDropdown.vue';
 import SettingsIcon from '@/components/SettingsIcon.vue';
 import ConfirmDialog from '@/components/ConfirmDialog.vue';
 import MainContent from './MainContent.vue';
+import { updateUserPresence, verifyToken } from '@/api/tickets';
+import { onMounted } from 'vue';
 
 type UserStatus = 'offline' | 'online' | 'break';
 
@@ -85,7 +87,22 @@ const settingsDropdownRef = ref<{ close: () => void } | null>(null);
 // notifyOrder(false); // 正常工单
 // notifyOrder(true);  // 异常工单
 const dropdownOpen = ref(false);
-const currentStatus = ref<UserStatus>('offline');
+
+// 初始化状态：优先读取登录时或 verify-token 返回的后端状态
+const lastStatusFromBackend = uni.getStorageSync('user_last_status') as UserStatus;
+const currentStatus = ref<UserStatus>(lastStatusFromBackend || 'offline');
+
+onMounted(async () => {
+  // 启动时静默校验 token 并同步最新状态
+  const success = await verifyToken();
+  if (success) {
+    const updatedStatus = uni.getStorageSync('user_last_status') as UserStatus;
+    if (updatedStatus && updatedStatus !== currentStatus.value) {
+      currentStatus.value = updatedStatus;
+    }
+  }
+});
+
 const pendingStatus = ref<UserStatus | null>(null);
 const statusConfirmVisible = ref(false);
 
@@ -146,9 +163,18 @@ const cancelStatusChange = () => {
   resetStatusConfirm();
 };
 
-const confirmStatusChange = () => {
+const confirmStatusChange = async () => {
   if (pendingStatus.value) {
-    currentStatus.value = pendingStatus.value;
+    const nextStatus = pendingStatus.value;
+    const success = await updateUserPresence(nextStatus);
+    if (!success) {
+      uni.showToast({ title: '无法连接到状态同步服务', icon: 'none' });
+      resetStatusConfirm();
+      return;
+    }
+    currentStatus.value = nextStatus;
+    // 同时持久化到本地，防止下次进入时状态闪烁
+    uni.setStorageSync('user_last_status', nextStatus);
   }
 
   resetStatusConfirm();

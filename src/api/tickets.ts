@@ -249,12 +249,38 @@ export async function completeTicket(ticketId: number, payload: Omit<UpdateTicke
 
 export async function verifyToken(): Promise<boolean> {
   try {
-    const response = await request<{ status: string; user?: { username?: string } }>('/api/verify-token');
+    const response = await request<{ status: string; user?: { username?: string; status?: 'online' | 'break' | 'offline' } }>('/api/verify-token');
     if (response.status === 'success' && response.user && response.user.username) {
       import('@/utils/auth').then(m => m.setCurrentUser(response.user!.username!));
+      if (response.user.status) {
+        uni.setStorageSync('user_last_status', response.user.status);
+      }
     }
     return response.status === 'success';
   } catch (error) {
+    return false;
+  }
+}
+
+/**
+ * 更新用户在线状态 (User Presence/Attendance)
+ * 根据后端建议修改路径为 /api/user/status，并适配返回格式
+ * @param status 'online' | 'break' | 'offline'
+ */
+export async function updateUserPresence(status: 'online' | 'break' | 'offline'): Promise<boolean> {
+  try {
+    const operator = getCurrentUser() || 'frontend-app';
+    const response = await request<{ status: 'success' | 'error'; message?: string }>('/api/user/status', {
+      method: 'POST',
+      data: {
+        operator,
+        status,
+        timestamp: Date.now(),
+      },
+    });
+    return response.status === 'success';
+  } catch (error) {
+    console.error('Failed to update user presence:', error);
     return false;
   }
 }

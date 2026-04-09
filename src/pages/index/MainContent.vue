@@ -148,7 +148,7 @@ import { getCurrentUser } from '@/utils/auth';
 
 type TicketTab = 'waiting' | 'pending';
 
-defineProps<{
+const props = defineProps<{
   status: 'offline' | 'online' | 'break';
 }>();
 
@@ -199,6 +199,9 @@ const isActiveStatus = (ticket: Ticket) => {
 };
 
 const waitingTickets = computed(() => {
+  // 如果是下线状态，不显示“待接起”列表（无法接收工单）
+  if (props.status === 'offline') return [];
+
   return tickets.value.filter((ticket) => {
     // 仅显示“待接起”或“异常”状态的工单
     // 后端已优化接口，但前端增加此逻辑可确保 SSE 推送或缓存数据时，他人接起的工单能立即从列表中消失
@@ -241,6 +244,11 @@ const triggerLongVibration = () => {
 };
 
 const triggerTicketAlert = (ticket: Ticket) => {
+  // 如果是下线状态或小休状态，不播放音频和震动
+  if (props.status === 'offline' || props.status === 'break') {
+    return;
+  }
+
   if (notifiedTicketIds.value[ticket.id]) {
     return;
   }
@@ -350,6 +358,18 @@ const swipeStyle = (ticketId: number) => {
 
 const handleSwipeStart = async (ticketId: number, event: TouchEvent) => {
   if (loadingTicketId.value === ticketId) {
+    return;
+  }
+
+  // 状态检查：下线状态下，不能进行任何工单操作
+  if (props.status === 'offline') {
+    notify('当前处于下线状态，无法操作工单');
+    return;
+  }
+
+  // 状态检查：小休状态下，如果是待接起列表，则不能接起工单
+  if (props.status === 'break' && activeTab.value === 'waiting') {
+    notify('当前处于小休状态，无法接起新工单');
     return;
   }
 
@@ -564,9 +584,14 @@ const handleAction = async (ticket: Ticket, tab: TicketTab) => {
 
       notify('已接起工单', 'success');
       return true;
-    } catch (error) {
+    } catch (error: any) {
       console.error(error);
-      notify(getErrorMessage(error, '接起回传失败，请稍后重试'));
+      // 捕获后端的 403 错误（非在线用户尝试接单）
+      if (error?.message?.includes('403')) {
+        notify('接单失败：当前状态不允许接单');
+      } else {
+        notify(getErrorMessage(error, '接起回传失败，请稍后重试'));
+      }
       return false;
     } finally {
       loadingTicketId.value = null;
